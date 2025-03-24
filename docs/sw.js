@@ -16,6 +16,7 @@ self.addEventListener("install", (evt) => {
 });
 
 self.addEventListener("activate", (evt) => {
+  NamedPorts.addNamedChannel("server", serverPortHandler, false);
   self.clients.claim();
   console.log("sw.js activated");
 });
@@ -30,10 +31,48 @@ self.addEventListener("fetch", (evt) => {
     if (!thisOrigin) {
       return fetch;
     }
-    return requestHandlerFactory(thisOrigin.requestPort);
+    return thisOrigin.requestHandler;
   };
   evt.respondWith(handler(evt.request));
 });
+
+function serverPortHandler(evt) {
+  switch (typeof evt.data) {
+    case "object":
+      if (evt.data !== null && typeof evt.data.cmd === "string") {
+        switch (evt.data.cmd) {
+          case "createOrigin":
+            createOrigin(evt.data);
+            break;
+          default:
+            evt.target.postMessage({
+              error: "Unrecognized Command Received",
+            });
+        }
+      }
+      break;
+    case "undefined":
+      serverPorts.remove();
+    default:
+      // Unrecognized command
+  };
+  function createOrigin(data) {
+    const worker = new Worker(data.src);
+    const configPortOpen = NamedPorts.openPort(worker, "config");
+    const requestPortOpen = NamedPorts.openPort(worker, "request");
+    const [ configPort, requestPort ] = await Promise.all([ configPortOpen, requestPortOpen ]);
+    origins.set(data.origin, {
+      worker,
+      requestPort,
+      requestHandler: requestHandlerFactory(thisOrigin.requestPort),
+    });
+    evt.target.postMessage({
+      msg: "originCreated",
+      origin: data.url,
+      configPort,
+    }, [ configPort ]);
+  }
+}
 
 function requestHandlerFactory(requestPort) {
   return async (request) => {
@@ -80,51 +119,3 @@ function requestHandlerFactory(requestPort) {
     }
   };
 }
-
-async function httpHandler(request) {
-  const resource = resources.get(evt.request.url);
-  if (resource) {
-    return new Response(resource);
-  } else {
-  }
-
-}
-
-function serverPortHandler(evt) {
-  switch (typeof evt.data) {
-    case "object":
-      if (evt.data !== null && typeof evt.data.cmd === "string") {
-        switch (evt.data.cmd) {
-          case "createOrigin":
-            createOrigin(evt.data);
-            break;
-          default:
-            evt.target.postMessage({
-              error: "Unrecognized Command Received",
-            });
-        }
-      }
-      break;
-    case "undefined":
-      serverPorts.remove();
-    default:
-      // Unrecognized command
-  }
-  function createOrigin(data) {
-    const worker = new Worker(data.src);
-    const configPortOpen = openPort(worker, "config");
-    const requestPortOpen = openPort(worker, "request");
-    const [ configPort, requestPort ] = await Promise.all([ configPortOpen, requestPortOpen ]);
-    origins.set(data.origin, {
-      worker,
-      requestPort,
-    });
-    evt.target.postMessage({
-      msg: "originData",
-      origin: data.url,
-      configPort,
-    }, [ configPort ]);
-  }
-}
-
-NamedPorts.addNamedChannel("server", serverPortHandler, false);
