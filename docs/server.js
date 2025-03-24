@@ -5,6 +5,9 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 import * as Main from "./main.mjs";
 
+// importScripts("https://scotwatson.github.io/WebCommon/MessageQueue.mjs");
+// new MessageQueue(self);
+
 Main.addNamedPort("request", handleRequest);
 Main.addNamedPort("config", handleConfig);
 
