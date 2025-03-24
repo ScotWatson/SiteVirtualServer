@@ -31,33 +31,14 @@ navigator.serviceWorker.register("sw.js");
 })();
 
 async function openServiceWorkerPort(channelName, handler) {
-  const swChannel = new MessageChannel();
-  navigator.serviceWorker.controller.postMessage({
-    name: channelName,
-    port: swChannel.port2,
-  }, [ swChannel.port2 ]);
-  return await new Promise((resolve, reject) => {
-    swChannel.port1.addEventListener("message", portInitialize);
-    swChannel.port1.start();
-    function portInitialize(evt) {
-      evt.target.removeEventListener(portInitialize);
-      evt.target.addEventListener(handler);
-      if (evt.data === undefined) {
-        reject(new Error("Attempt to open port \"" + channelName + "\" rejected by service worker."));
-        return;
-      }
-      if (evt.data === null) {
-        resolve(swChannel.port1);
-        return;
-      }
-      resolve(evt.data);
-    }
-  });
+  const thisPort = await Main.openPort(navigator.serviceWorker.controller, channelName);
+  thisPort.addEventListener(handler);
+  return thisPort;
 }
 async function createServer(serverPort, origin, handler) {
   return await new Promise((resolve) => {
     serverPort.addEventListener("message", (evt) => {
-      if ((evt.data.msg === "serverCreated") && (evt.data.origin === origin)) {
+      if ((evt.data.msg === "originCreated") && (evt.data.origin === origin)) {
         evt.data.port.addEventListener(handler);
         evt.data.port.start();
         evt.data.port.postMessage(null);
@@ -65,8 +46,9 @@ async function createServer(serverPort, origin, handler) {
       }
     });
     serverPort.postMessage({
-      cmd: "createServer",
+      cmd: "createOrigin",
       origin: origin,
+      src: "server.js",
     });
   });
 }
